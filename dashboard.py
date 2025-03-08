@@ -16,7 +16,7 @@ import seaborn as sns
 @st.cache_data
 def load_data():
     try:
-        return pd.read_csv("dataset_cleaned.csv")
+        return pd.read_csv("D:\DATA\Dokumen\Projek Analisis Data\Projek Analisis Data\dataset_cleaned.csv")
     except FileNotFoundError:
         st.error("Dataset tidak ditemukan. Pastikan file 'dataset_cleaned.csv' tersedia.")
         return None
@@ -24,24 +24,25 @@ def load_data():
 dataset = load_data()
 
 if dataset is not None:
-    # Konversi order_purchase_timestamp ke format datetime
     dataset['order_purchase_timestamp'] = pd.to_datetime(dataset['order_purchase_timestamp'])
     dataset['day_of_week'] = dataset['order_purchase_timestamp'].dt.day_name()
     dataset['month'] = dataset['order_purchase_timestamp'].dt.month_name()
 
-    # Sidebar
     st.sidebar.title("📊 Dashboard Analisis E-Commerce")
-    page = st.sidebar.radio("Pilih Analisis:", ["Pola Transaksi", "Review vs Pengiriman", "Kategori Produk", "RFM Analysis", "Performa Produk"])
+    page = st.sidebar.radio("Pilih Analisis:", ["Pola Transaksi", "Review vs Pengiriman", "Kategori Produk", "Performa Produk"])
 
     # 1️⃣ Pola Transaksi
     if page == "Pola Transaksi":
         st.title("📅 Pola Transaksi Berdasarkan Waktu")
-
+        
         day_trend = dataset['day_of_week'].value_counts().reindex(
             ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         ).fillna(0)
-        month_trend = dataset['month'].value_counts()
-
+        month_trend = dataset['month'].value_counts().reindex(
+            ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+               'August', 'September', 'October', 'November', 'December']
+        ).fillna(0)
+        
         fig, ax = plt.subplots(1, 2, figsize=(12, 5))
         sns.barplot(x=day_trend.index, y=day_trend.values, palette='coolwarm', ax=ax[0])
         ax[0].set_title("Jumlah Transaksi per Hari")
@@ -50,63 +51,49 @@ if dataset is not None:
         ax[1].set_title("Jumlah Transaksi per Bulan")
 
         st.pyplot(fig)
-
+    
     # 2️⃣ Review vs Pengiriman
     elif page == "Review vs Pengiriman":
         st.title("🚚 Waktu Pengiriman vs Rating Pelanggan")
-        if 'delivered_date' in dataset.columns and 'review_score' in dataset.columns:
-            dataset = dataset.dropna(subset=['delivered_date', 'review_score'])
-            dataset['delivery_time'] = (pd.to_datetime(dataset['delivered_date']) - pd.to_datetime(dataset['order_purchase_timestamp'])).dt.days
+        if 'order_delivered_customer_date' in dataset.columns and 'review_score' in dataset.columns:
+            dataset = dataset.dropna(subset=['order_delivered_customer_date', 'review_score'])
+            dataset['delivery_days'] = (pd.to_datetime(dataset['order_delivered_customer_date']) - dataset['order_purchase_timestamp']).dt.days
+            delivery_vs_rating = dataset.groupby('review_score')['delivery_days'].mean().reset_index()
 
             fig, ax = plt.subplots(figsize=(8, 5))
-            sns.boxplot(x=dataset['review_score'], y=dataset['delivery_time'], palette='coolwarm')
+            sns.barplot(x=delivery_vs_rating['review_score'], y=delivery_vs_rating['delivery_days'], palette="coolwarm", ax=ax)
+            ax.set_xlabel("Rating Review Pelanggan")
+            ax.set_ylabel("Rata-rata Waktu Pengiriman (hari)")
+            ax.set_title("Hubungan antara Waktu Pengiriman dan Rating Pelanggan")
             st.pyplot(fig)
         else:
-            st.error("Kolom 'delivered_date' atau 'review_score' tidak ditemukan dalam dataset.")
-
+            st.error("Kolom yang diperlukan tidak ditemukan dalam dataset.")
+    
     # 3️⃣ Kategori Produk
     elif page == "Kategori Produk":
         st.title("📦 Kategori Produk yang Paling Sering Dibeli")
         if 'product_category_name' in dataset.columns:
             category_counts = dataset['product_category_name'].value_counts().head(10)
-
             fig, ax = plt.subplots(figsize=(8, 5))
-            sns.barplot(y=category_counts.index, x=category_counts.values, palette='Blues_r')
+            sns.barplot(y=category_counts.index, x=category_counts.values, palette='Blues_r', ax=ax)
             st.pyplot(fig)
         else:
             st.error("Kolom 'product_category_name' tidak ditemukan dalam dataset.")
-
-    # 4️⃣ RFM Analysis
-    elif page == "RFM Analysis":
-        st.title("📊 RFM Analysis")
-        reference_date = dataset['order_purchase_timestamp'].max()
-
-        if all(col in dataset.columns for col in ["customer_id", "order_purchase_timestamp", "price"]):
-            rfm = dataset.groupby("customer_id").agg({
-                "order_purchase_timestamp": lambda x: (reference_date - x.max()).days,  # Recency
-                "customer_id": "nunique",  # Frequency (jumlah transaksi unik per customer)
-                "price": "sum"  # Monetary
-            }).reset_index()
-            rfm.columns = ["Customer_ID", "Recency", "Frequency", "Monetary"]
-
-            fig, ax = plt.subplots(1, 3, figsize=(15, 5))
-            sns.histplot(rfm['Recency'], bins=20, kde=True, ax=ax[0], color='red')
-            ax[0].set_title("Distribusi Recency")
-
-            sns.histplot(rfm['Frequency'], bins=20, kde=True, ax=ax[1], color='blue')
-            ax[1].set_title("Distribusi Frequency")
-
-            sns.histplot(rfm['Monetary'], bins=20, kde=True, ax=ax[2], color='green')
-            ax[2].set_title("Distribusi Monetary")
-
-            st.pyplot(fig)
-        else:
-            st.error("Kolom yang diperlukan untuk RFM Analysis tidak ditemukan dalam dataset.")
-
-    # 5️⃣ Performa Produk
+    
+    # 4️⃣ Performa Produk
     elif page == "Performa Produk":
         st.title("🏆 Performa Produk")
-        if 'product_category_name' in dataset.columns and 'order_id' in dataset.columns:
+        if all(col in dataset.columns for col in ['product_category_name', 'order_id', 'price']):
+            total_orders = dataset['order_id'].nunique()
+            total_revenue = dataset['price'].sum()
+            avg_price = dataset['price'].mean()
+            top_product = dataset['product_category_name'].value_counts().idxmax()
+            
+            st.metric(label="Total Pesanan", value=total_orders)
+            st.metric(label="Total Pendapatan", value=f"$ {total_revenue:,.0f}")
+            st.metric(label="Rata-rata Harga Produk", value=f"$ {avg_price:,.0f}")
+            st.metric(label="Produk Terlaris", value=top_product)
+
             product_sales = dataset['product_category_name'].value_counts()
             top_5_products = product_sales.head(5)
             bottom_5_products = product_sales.tail(5)
@@ -114,10 +101,10 @@ if dataset is not None:
             fig, ax = plt.subplots(1, 2, figsize=(15, 5))
             sns.barplot(y=top_5_products.index, x=top_5_products.values, palette='Greens_r', ax=ax[0])
             ax[0].set_title("Top 5 Produk Paling Laris")
-
+            
             sns.barplot(y=bottom_5_products.index, x=bottom_5_products.values, palette='Reds_r', ax=ax[1])
             ax[1].set_title("Bottom 5 Produk Paling Sedikit Terjual")
-
+            
             st.pyplot(fig)
         else:
-            st.error("Kolom 'product_category_name' atau 'order_id' tidak ditemukan dalam dataset.")
+            st.error("Kolom yang diperlukan tidak ditemukan dalam dataset.")
