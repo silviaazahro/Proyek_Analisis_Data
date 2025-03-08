@@ -15,10 +15,11 @@ import seaborn as sns
 # Load dataset
 @st.cache_data
 def load_data():
+    url = "https://raw.githubusercontent.com/silviaazahro/Proyek_Analisis_Data/refs/heads/main/dataset_cleaned.csv"
     try:
-        return pd.read_csv("D:\DATA\Dokumen\Projek Analisis Data\Projek Analisis Data\dataset_cleaned.csv")
-    except FileNotFoundError:
-        st.error("Dataset tidak ditemukan. Pastikan file 'dataset_cleaned.csv' tersedia.")
+        return pd.read_csv(url)
+    except Exception as e:
+        st.error(f"Gagal memuat dataset: {e}")
         return None
 
 dataset = load_data()
